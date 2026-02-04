@@ -396,6 +396,11 @@ configure_server() {
         # Get config name
         read -p "Config name [server]: " config_name
         config_name="${config_name:-server}"
+        config_name=$(echo "$config_name" | tr -cd '[:alnum:]-_')
+        if [ -z "$config_name" ]; then
+            config_name="default"
+        fi
+        print_info "Sanitized config name: $config_name"
         
         # Check existing config
         if [ -f "$CONFIG_DIR/${config_name}.yaml" ]; then
