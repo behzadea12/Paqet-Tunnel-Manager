@@ -67,3 +67,7 @@ If Paqet fails to install automatically during configuration
    ```bash
    bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh)
    ```
+
+
+If there is any problem, send a message to my Telegram ID:
+@behzad_developer
