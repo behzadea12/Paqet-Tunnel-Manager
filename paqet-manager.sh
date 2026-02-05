@@ -2,7 +2,7 @@
 
 #=================================================
 # Paqet Tunnel Manager
-# Version: 3.2
+# Version: 3.3
 # Raw packet-level tunneling for bypassing network restrictions
 # GitHub: https://github.com/hanselime/paqet
 # Design and development by: https://github.com/behzadea12 - https://t.me/behzad_developer
@@ -19,7 +19,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 # Configuration
-SCRIPT_VERSION="3.2"
+SCRIPT_VERSION="3.3"
 PAQET_VERSION="v1.0.0-alpha.12"
 CONFIG_DIR="/etc/paqet"
 SERVICE_DIR="/etc/systemd/system"
@@ -42,7 +42,7 @@ show_banner() {
     echo "║     ╚═╝     ╚═╝  ╚═╝ ╚══▀▀═╝ ╚══════╝   ╚═╝                  ║"
     echo "║                                                              ║"
     echo "║          Raw Packet Tunnel - Firewall Bypass                 ║"
-    echo "║                                 Manager v3.2                 ║"
+    echo "║                                 Manager v3.3                 ║"
     echo "║                                                              ║"
     echo "║          https://t.me/behzad_developer                       ║"
     echo "║          https://github.com/behzadea12                       ║"    
@@ -235,9 +235,9 @@ generate_secret_key() {
     fi
 }
 
-# Download Paqet binary
-download_paqet() {
-    print_step "Downloading Paqet binary..."
+# Download and install Paqet binary
+install_paqet() {
+    print_step "Installing Paqet binary..."
     
     local arch
     arch=$(detect_arch)
@@ -248,43 +248,66 @@ download_paqet() {
     local os="linux"
     local version="$PAQET_VERSION"
     
-    # Check for local file first
+    # Check for local files in /root/paqet
     local local_dir="/root/paqet"
-    local archive_name="paqet-${os}-${arch}-${version}.tar.gz"
-    local download_url="https://github.com/${GITHUB_REPO}/releases/download/${version}/${archive_name}"
     
-    mkdir -p "$INSTALL_DIR"
+    # Create directory if doesn't exist
+    mkdir -p "$local_dir"
     
-    # Try local file first
-    if [ -f "$local_dir/$archive_name" ]; then
-        print_success "Found local file: $local_dir/$archive_name"
-        cp "$local_dir/$archive_name" "/tmp/paqet.tar.gz"
-    elif [ -d "$local_dir" ] && ls "$local_dir"/*.tar.gz 2>/dev/null | head -1; then
-        print_info "Found archives in $local_dir:"
-        ls -1 "$local_dir"/*.tar.gz 2>/dev/null
-        
-        read -p "Use one of these files? (y/N): " use_local
-        
-        if [[ "$use_local" =~ ^[Yy]$ ]]; then
-            read -p "Enter filename: " user_file
-            
-            if [ -f "$user_file" ]; then
-                local_archive="$user_file"
-            elif [ -f "$local_dir/$user_file" ]; then
-                local_archive="$local_dir/$user_file"
-            else
-                print_error "File not found"
-                return 1
-            fi
-            
-            cp "$local_archive" "/tmp/paqet.tar.gz"
-            print_success "Using local file"
-        fi
+    # Check if there are any .tar.gz files in /root/paqet
+    local local_files=()
+    if [ -d "$local_dir" ]; then
+        mapfile -t local_files < <(find "$local_dir" -name "*.tar.gz" -type f 2>/dev/null)
     fi
     
-    # Download if no local file
-    if [ ! -f "/tmp/paqet.tar.gz" ]; then
-        print_info "Downloading from GitHub..."
+    # If local files exist, let user choose
+    if [ ${#local_files[@]} -gt 0 ]; then
+        echo -e "${YELLOW}Found local paqet archives in $local_dir:${NC}"
+        echo ""
+        
+        for i in "${!local_files[@]}"; do
+            local filename=$(basename "${local_files[$i]}")
+            echo -e "  $((i+1)). ${CYAN}$filename${NC}"
+        done
+        
+        echo ""
+        echo -e "${YELLOW}Options:${NC}"
+        echo -e "  ${CYAN}0)${NC} Download from GitHub (default)"
+        echo -e "  ${CYAN}1-${#local_files[@]})${NC} Use local file"
+        echo ""
+        
+        read -p "Choose [0-${#local_files[@]}]: " file_choice
+        
+        if [[ "$file_choice" -ge 1 ]] && [[ "$file_choice" -le ${#local_files[@]} ]]; then
+            local selected_file="${local_files[$((file_choice-1))]}"
+            print_success "Using local file: $(basename "$selected_file")"
+            cp "$selected_file" "/tmp/paqet.tar.gz"
+        else
+            # Download from GitHub
+            print_info "Downloading from GitHub..."
+            local archive_name="paqet-${os}-${arch}-${version}.tar.gz"
+            local download_url="https://github.com/${GITHUB_REPO}/releases/download/${version}/${archive_name}"
+            
+            if ! curl -fsSL "$download_url" -o "/tmp/paqet.tar.gz" 2>/dev/null; then
+                print_error "Download failed from GitHub"
+                print_info "URL: $download_url"
+                
+                # Try to use any local file as fallback
+                if [ ${#local_files[@]} -gt 0 ]; then
+                    print_warning "Using first available local file as fallback"
+                    cp "${local_files[0]}" "/tmp/paqet.tar.gz"
+                else
+                    return 1
+                fi
+            else
+                print_success "Downloaded from GitHub"
+            fi
+        fi
+    else
+        # No local files, download from GitHub
+        print_info "No local files found. Downloading from GitHub..."
+        local archive_name="paqet-${os}-${arch}-${version}.tar.gz"
+        local download_url="https://github.com/${GITHUB_REPO}/releases/download/${version}/${archive_name}"
         
         if ! curl -fsSL "$download_url" -o "/tmp/paqet.tar.gz" 2>/dev/null; then
             print_error "Download failed"
@@ -292,9 +315,12 @@ download_paqet() {
             print_info "Please download manually and place in $local_dir/"
             return 1
         fi
+        print_success "Downloaded from GitHub"
     fi
     
-    # Extract binary
+    # Extract and install
+    mkdir -p "$INSTALL_DIR"
+    
     tar -xzf "/tmp/paqet.tar.gz" -C "$INSTALL_DIR" 2>/dev/null || {
         print_error "Failed to extract archive"
         rm -f "/tmp/paqet.tar.gz"
@@ -581,9 +607,9 @@ configure_server() {
         read -p "V2Ray inbound ports (comma separated) [9090]: " inbound_ports
         inbound_ports="${inbound_ports:-9090}"
         
-        # Download Paqet if not installed
+        # Install Paqet if not installed
         if [ ! -f "$BIN_DIR/paqet" ]; then
-            if ! download_paqet; then
+            if ! install_paqet; then
                 print_error "Failed to install Paqet"
                 read -p "Press Enter to continue..."
                 return 1
@@ -730,9 +756,9 @@ configure_client() {
             fi
         done
         
-        # Download Paqet if not installed
+        # Install Paqet if not installed
         if [ ! -f "$BIN_DIR/paqet" ]; then
-            if ! download_paqet; then
+            if ! install_paqet; then
                 print_error "Failed to install Paqet"
                 read -p "Press Enter to continue..."
                 return 1
@@ -1050,8 +1076,63 @@ view_config() {
     read -p "Press Enter to continue..."
 }
 
-# Uninstall
-uninstall() {
+# Install BBR
+install_bbr() {
+    show_banner
+    echo -e "${YELLOW}Installing BBR (Google TCP Congestion Control)${NC}"
+    echo ""
+    
+    echo -e "${YELLOW}BBR is a TCP congestion control algorithm developed by Google.${NC}"
+    echo -e "${YELLOW}It can significantly improve network performance and speed.${NC}"
+    echo ""
+    
+    read -p "Do you want to install BBR? (y/N): " confirm
+    
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}BBR installation cancelled.${NC}"
+        return
+    fi
+    
+    print_step "Downloading and installing BBR..."
+    
+    # Download BBR installer script
+    if wget --no-check-certificate https://github.com/teddysun/across/raw/master/bbr.sh -O /tmp/bbr.sh 2>/dev/null; then
+        chmod +x /tmp/bbr.sh
+        print_success "BBR installer downloaded"
+        
+        echo ""
+        echo -e "${YELLOW}The BBR installer will now run.${NC}"
+        echo -e "${YELLOW}Follow the on-screen instructions.${NC}"
+        echo ""
+        echo -e "${CYAN}Note: This may require a system reboot.${NC}"
+        echo ""
+        
+        read -p "Press Enter to continue with BBR installation..."
+        
+        # Run BBR installer
+        /tmp/bbr.sh
+        
+        echo ""
+        print_success "BBR installation completed!"
+        echo ""
+        echo -e "${YELLOW}If the installer requested a reboot, please restart your server.${NC}"
+        echo -e "${YELLOW}After reboot, BBR will be active and optimizing your network.${NC}"
+        
+        # Clean up
+        rm -f /tmp/bbr.sh
+    else
+        print_error "Failed to download BBR installer"
+        echo ""
+        echo -e "${YELLOW}You can install BBR manually with:${NC}"
+        echo -e "${CYAN}wget --no-check-certificate https://github.com/teddysun/across/raw/master/bbr.sh && chmod +x bbr.sh && ./bbr.sh${NC}"
+    fi
+    
+    echo ""
+    read -p "Press Enter to return to main menu..."
+}
+
+# Uninstall Paqet
+uninstall_paqet() {
     show_banner
     echo -e "${RED}Uninstall Paqet${NC}"
     echo ""
@@ -1110,19 +1191,24 @@ main_menu() {
         fi
         
         echo ""
+        echo -e "${CYAN}0.${NC} Install Paqet Binary Only"
         echo -e "${CYAN}1.${NC} Install Dependencies"
         echo -e "${CYAN}2.${NC} Configure as Server (kharej)"
         echo -e "${CYAN}3.${NC} Configure as Client (Iran)"
         echo -e "${CYAN}4.${NC} List Services"
         echo -e "${CYAN}5.${NC} Manage Service"
         echo -e "${CYAN}6.${NC} View Configuration"
-        echo -e "${CYAN}7.${NC} Uninstall"
-        echo -e "${CYAN}8.${NC} Exit"
+        echo -e "${CYAN}7.${NC} Install BBR (Optimize Network)"
+        echo -e "${CYAN}8.${NC} Uninstall Paqet"
+        echo -e "${CYAN}9.${NC} Exit"
         echo ""
         
-        read -p "Select option [1-8]: " choice
+        read -p "Select option [0-9]: " choice
         
         case $choice in
+            0)
+                install_paqet
+                ;;
             1)
                 install_dependencies
                 ;;
@@ -1142,9 +1228,12 @@ main_menu() {
                 view_config
                 ;;
             7)
-                uninstall
+                install_bbr
                 ;;
             8)
+                uninstall_paqet
+                ;;
+            9)
                 echo -e "${GREEN}Goodbye!${NC}"
                 exit 0
                 ;;
