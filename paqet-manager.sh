@@ -767,9 +767,12 @@ network:
   ipv4:
     addr: "${local_ip}:${port}"
     router_mac: "${gateway_mac}"
+  tcp:
+    local_flag: ["PA"]
 
 transport:
   protocol: "kcp"
+  conn: 1
   kcp:
     key: "${secret_key}"
 ${kcp_config}
@@ -925,12 +928,16 @@ network:
   ipv4:
     addr: "${local_ip}:0"
     router_mac: "${gateway_mac}"
+  tcp:
+    local_flag: ["PA"]
+    remote_flag: ["PA"]
 
 server:
   addr: "${server_ip}:${server_port}"
 
 transport:
   protocol: "kcp"
+  conn: 1
   kcp:
     key: "${secret_key}"
 ${kcp_config}
