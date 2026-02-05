@@ -77,49 +77,52 @@ Select **option 7**, then choose one of the following:
 
 
 
+
 ## Troubleshooting: Paqet Installation Issues
 
 If Paqet fails to install automatically during configuration  
-(i.e. you see "Failed to install Paqet" or the script gets stuck when adding a new config in **Server/Kharej** or **Client/Iran** mode), follow these simple steps:
+(i.e., you see "Failed to install Paqet" or the script gets stuck when adding a new config in **Server/Kharej** or **Client/Iran** mode), follow these steps:
 
 1. **Manually download the Paqet binary**  
 
    Visit the official releases page:  
-   https://github.com/hanselime/paqet/releases
+   [https://github.com/hanselime/paqet/releases](https://github.com/hanselime/paqet/releases)
 
-   - Choose the **latest release** (currently `v1.0.0-alpha.13` or newer — always pick the most recent one).  
+   - Choose the **latest release** (e.g., `v1.0.0-alpha.13` or newer — always pick the most recent).  
    - Download the file that matches your server architecture:
 
      - `paqet-linux-amd64-*.tar.gz` → for most 64-bit servers (x86_64 / amd64)  
      - `paqet-linux-arm64-*.tar.gz` → for ARM-based servers (aarch64 / arm64)
 
-2. **Place the downloaded file in this exact folder**  
-
-   Move or copy the `.tar.gz` file to:
+2. **Place the downloaded file in this folder:**  
 
    ```bash
    /root/paqet/
-   ```
-   If the folder doesn't exist, create it first:
+   ````
+
+If the folder doesn't exist, create it first:
+
    ```bash
-    mkdir -p /root/paqet
+       mkdir -p /root/paqet
    ```
 
-3. Run the manager script again
-   The script will automatically detect the file inside /root/paqet/, use it instead of trying to download again, extract it, and complete the installation.
+3. **Run the manager script again**
+
+   The script will automatically detect the file inside `/root/paqet/`, extract it, and complete the installation:
+
    ```bash
    bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh)
    ```
 
+---
 
-## ⚠️ If There Is Any Problem...
+## ⚠️ Need Help?
 
-**Send a message to my Telegram ID right away:**
+If you encounter any issues, **contact me on Telegram**:
+**[@behzad_developer](https://t.me/behzad_developer)**
 
-**@behzad_developer**
-
-I'm usually online and will help you as soon as possible!
-
+I am usually online and will assist you as soon as possible.
+ 
 ## Requirements
 - Linux server (Ubuntu, Debian, CentOS, etc.)
 - Root access
