@@ -76,7 +76,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Mana
 6. **Press Enter** *(automatic)*
 7. **Press Enter** *(automatic)*
 8. **Press Enter** *(automatic)*
-9. **Select option 1**
+9. **Select option 1 or..**
 10. **conn value** → Number of KCP connections
 11. **MTU** → Usually 1350 is fine (press Enter)
 12. **Select option 2**
