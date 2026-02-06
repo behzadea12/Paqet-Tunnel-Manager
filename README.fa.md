@@ -228,6 +228,22 @@ bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Mana
 
 ---
 
+## 💖 حمایت مالی / Support / Donate
+
+اگر از **Paqet-Tunnel-Manager** استفاده می‌کنید و می‌خواهید از توسعه این پروژه حمایت کنید، می‌توانید از طریق موارد زیر کمک کنید:
+
+<details>
+<summary>💰 ارز دیجیتال / Crypto</summary>
+<br>
+
+* **Tron (TRC20):**
+  `TFYnorJt5gvejLwR8XQdjep1krS9Zw8pz3`
+
+</details>
+
+---
+> هر حمایتی، کوچک یا بزرگ، به ادامه پروژه کمک می‌کند و انگیزه تیم توسعه را افزایش می‌دهد. 🙏
+
 ## قدردانی
 
 * **paqet** – کتابخانه تونل‌سازی Raw Packet نوشته‌شده توسط hanselime
