@@ -16,8 +16,9 @@ Management script for **paqet**: a raw socket, KCP-based tunnel designed for fir
 * [Network Optimization (Optional)](#network-optimization-optional)
 * [Included Tools](#included-tools)
 * [Troubleshooting: Paqet Installation Issues](#troubleshooting-paqet-installation-issues)
-* [Need Help](#-need-help)
+* [Need Help](#%EF%B8%8F-need-help)
 * [Requirements](#requirements)
+* [Script Screenshots](#-script-screenshots)
 * [License](#license)
 * [Credits](#credits)
 
