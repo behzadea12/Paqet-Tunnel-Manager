@@ -33,6 +33,15 @@ Run the script on **both servers** as **root**:
 bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh)
 ```
 
+---
+
+> **Old version (3.8)** – If you encounter issues with the new version, you can use this one:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager3-8.sh)
+```
+
+
 Select **option 0**, then **option 1** to install prerequisites.
 
 ---
