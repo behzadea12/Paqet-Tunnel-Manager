@@ -66,6 +66,11 @@ bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Mana
 
 ### مرحله ۲: راه‌اندازی سرور ایران (Iran – Client/Entry Point)
 
+اسکریپت را اجرا کنید:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh)
+```
 #### مراحل پیکربندی
 
 1. **گزینه 3** را انتخاب کنید (Iran)
