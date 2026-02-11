@@ -144,27 +144,21 @@ Select **option 7**, then choose one of the following:
 ---
 
 ## Troubleshooting: Paqet Installation Issues
-
 If Paqet fails to install automatically during configuration
 (e.g., you see **"Failed to install Paqet"** or the script gets stuck when adding a new config in **Server/Kharej** or **Client/Iran** mode), follow these steps:
-
+---
+### 1️⃣ Download / Binary Not Found
 1. **Manually download the Paqet binary**
-
    Visit the official releases page:
    [https://github.com/hanselime/paqet/releases](https://github.com/hanselime/paqet/releases)
-
-   * Choose the **latest release** (e.g., `v1.0.0-alpha.13` or newer).
+   * Choose the latest release.
    * Download the file matching your server architecture:
-
      * `paqet-linux-amd64-*.tar.gz` → x86_64 / amd64
-     * `paqet-linux-arm64-*.tar.gz` → aarch64 / arm64
-
+     * `paqet-linux-arm64-*.tar.gz` → arm64
 2. **Place the downloaded file in this folder:**
-
 ```bash
 /root/paqet/
 ```
-
 If the folder does not exist, create it first:
 
 ```bash
@@ -172,13 +166,68 @@ mkdir -p /root/paqet
 ```
 
 3. **Run the manager script again**
-
 The script will automatically detect the file inside `/root/paqet/`, extract it, and complete the installation:
-
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh)
 ```
 
+---
+
+### 2️⃣ GLIBC_2.32 or GLIBC_2.34 Not Found
+If the service fails with an error like:
+```
+/usr/local/bin/paqet: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34' not found
+```
+The pre-built Paqet binary requires a newer glibc than your system provides
+(e.g., Ubuntu 18.04 or Debian 10).
+
+#### Option A: Upgrade the OS
+Upgrade to a distro with glibc 2.34+:
+* Ubuntu 22.04 or newer
+* Debian 12 or newer
+Then reinstall Paqet using the manager (option 0).
+
+#### Option B: Build Paqet from Source
+Build Paqet directly on your current system so it uses your installed glibc:
+```bash
+apt install -y golang git
+git clone https://github.com/hanselime/paqet.git && cd paqet
+go build -o paqet ./cmd/paqet
+sudo cp paqet /usr/local/bin/paqet
+sudo chmod +x /usr/local/bin/paqet
+```
+Then start your Paqet service again from the manager:
+List Services → Manage → Start
+#### Option C: Use a Newer VPS
+Deploy a VPS with a newer OS (e.g., Ubuntu 22.04) and install Paqet there.
+---
+### 3️⃣ bind: address already in use (Port Already in Use)
+If Paqet fails with an error like:
+```
+failed to bind TCP socket on 0.0.0.0:8443: bind: address already in use
+```
+The port (e.g., 8443) is already being used by another program, or the same port was added twice in the forward list.
+#### Fix 1: Check What Uses the Port
+```bash
+ss -tuln | grep 8443
+```
+or
+```bash
+lsof -i :8443
+```
+Stop the conflicting service or choose another port in the Paqet configuration.
+#### Fix 2: Remove Duplicate Port
+If a port appears twice in your forward list:
+* Edit the configuration file:
+```bash
+nano /etc/paqet/your_config.yaml
+```
+* Under `forward:`, remove the duplicate `listen` entry for that port.
+* Restart the service:
+```bash
+systemctl restart paqet-your_config
+```
+In newer script versions, duplicate ports are automatically removed.
 ---
 
 ## ⚠️ Need Help?
