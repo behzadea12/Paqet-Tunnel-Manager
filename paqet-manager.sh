@@ -1,7 +1,8 @@
 #!/bin/bash
 #=================================================
 # Paqet Tunnel Manager
-# Version: 7.0
+# Version: 7.2
+# Tuned for optimized core v2.5.0, not alpha.21
 # Raw packet-level tunneling for bypassing network restrictions
 # GitHub: https://github.com/hanselime/paqet
 # Manager GitHub: https://github.com/behzadea12/Paqet-Tunnel-Manager
@@ -24,7 +25,7 @@ readonly PURPLE='\033[0;35m'
 readonly NC='\033[0m'
 
 # Script Configuration
-readonly SCRIPT_VERSION="7.0"
+readonly SCRIPT_VERSION="7.2"
 readonly MANAGER_NAME="paqet-manager"
 readonly MANAGER_PATH="/usr/local/bin/$MANAGER_NAME"
 
@@ -49,13 +50,13 @@ readonly BACKUP_LIMITS="${BACKUP_DIR}/limits-99-paqet.backup-$(date +%Y%m%d-%H%M
 # Default Values
 readonly DEFAULT_LISTEN_PORT="8888"
 readonly DEFAULT_KCP_MODE="fast"
-readonly DEFAULT_ENCRYPTION="aes-128-gcm"
-readonly DEFAULT_CONNECTIONS="4"
-readonly DEFAULT_MTU="1150"
+readonly DEFAULT_ENCRYPTION="aes"
+readonly DEFAULT_CONNECTIONS="3"
+readonly DEFAULT_MTU="1350"
 readonly DEFAULT_PCAP_SOCKBUF_SERVER="8388608"
 readonly DEFAULT_PCAP_SOCKBUF_CLIENT="4194304"
-readonly DEFAULT_TRANSPORT_TCPBUF="8192"
-readonly DEFAULT_TRANSPORT_UDPBUF="4096"
+readonly DEFAULT_TRANSPORT_TCPBUF="32768"
+readonly DEFAULT_TRANSPORT_UDPBUF="16384"
 readonly DEFAULT_AUTO_RESTART_INTERVAL="1hour"
 readonly DEFAULT_V2RAY_PORTS="9090"
 readonly DEFAULT_SOCKS5_PORT="1080"
@@ -75,9 +76,13 @@ declare -A ENCRYPTION_OPTIONS=(
     ["2"]="aes:High security / Medium speed / General use"
     ["3"]="aes-128:High security / Fast / Low CPU usage"
     ["4"]="aes-192:Very high security / Medium speed / Moderate CPU usage"
-    ["5"]="aes-256:Maximum security / Slower / Higher CPU usage"
-    ["6"]="none:No encryption / Max speed / Insecure"
-    ["7"]="null:No encryption / Max speed / Insecure"
+    ["5"]="salsa20:Stream cipher / Fast / Good security"
+    ["6"]="sm4:Chinese standard / Medium speed"
+    ["7"]="blowfish:Legacy / Medium speed"
+    ["8"]="twofish:High security / Medium speed"
+    ["9"]="xor:Minimal obfuscation / Max speed / Weak"
+    ["10"]="none:No encryption / Max speed / Insecure"
+    ["11"]="null:No encryption / Max speed / Insecure"
 )
 
 # Auto-restart intervals
@@ -133,6 +138,8 @@ readonly COMMON_PORTS=("443" "80" "22" "53")
 # Manager versions for switch option
 declare -A MANAGER_VERSIONS=(
     ["latest"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh"
+    ["7.2"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh"
+    ["7.0"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager7-0.sh"
     ["6.0"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager6-0.sh"
     ["5.1"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager5-1.sh"
     ["3.8"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager3-8.sh"
@@ -170,7 +177,7 @@ show_banner() {
     echo "║     ██║     ██║  ██║╚██████╔╝███████╗   ██║                  ║"
     echo "║     ╚═╝     ╚═╝  ╚═╝ ╚══▀▀═╝ ╚══════╝   ╚═╝                  ║"
     echo "║                                                              ║"
-    echo "║          Raw Packet Tunnel - Firewall Bypass                 ║"
+    echo "║          Raw Packet Tunnel - v2.5 and upstream cores         ║"
     echo "║                                 Manager v${SCRIPT_VERSION}                 ║"
     echo "║                                                              ║"
     echo "║          https://t.me/behzad_developer                       ║"
@@ -423,8 +430,64 @@ get_latest_paqet_version() {
     if [ -n "$version" ]; then
         echo "$version"
     else
-        echo "v1.0.0-alpha.16"
+        echo "v2.5.0"
     fi
+}
+
+# Family of the installed binary. The script can configure every family.
+# It cannot make alpha.21 speak to v2.5; those wire formats differ.
+installed_core_version() {
+    if [ ! -x "$BIN_DIR/paqet" ]; then
+        echo "not-installed"
+        return
+    fi
+    local version
+    version=$("$BIN_DIR/paqet" version 2>/dev/null | grep "^Version:" | head -1 | cut -d':' -f2 | xargs)
+    echo "${version:-unknown}"
+}
+
+core_family() {
+    local version="$1"
+    case "$version" in
+        v2.*|*optimized*) echo "v25" ;;
+        *alpha.2*) echo "a21" ;;
+        *alpha.1[6-9]*|*alpha.16*) echo "a16" ;;
+        not-installed|unknown|"") echo "unknown" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+load_core_defaults() {
+    CORE_VERSION=$(installed_core_version)
+    CORE_FAMILY=$(core_family "$CORE_VERSION")
+    case "$CORE_FAMILY" in
+        v25)
+            CORE_CONN="3"
+            CORE_MTU="1350"
+            CORE_ENC="2"
+            CORE_NOTE="v2.5 optimized. Both sides must be v2.5. Do not pair with alpha.21."
+            ;;
+        a21)
+            CORE_CONN="1"
+            CORE_MTU="1350"
+            CORE_ENC="2"
+            CORE_NOTE="upstream alpha.20+. Both sides must be the same alpha. Do not pair with v2.5."
+            ;;
+        a16)
+            CORE_CONN="1"
+            CORE_MTU="1350"
+            CORE_ENC="2"
+            CORE_NOTE="upstream alpha.16 line. Both sides must be this same build."
+            ;;
+        *)
+            CORE_CONN=""
+            CORE_MTU=""
+            CORE_ENC="2"
+            CORE_NOTE="core version unknown. Optional fields are left unset so the binary uses its own defaults."
+            ;;
+    esac
+    echo -e "${YELLOW}Installed core:${NC} ${CYAN}${CORE_VERSION}${NC} (${CORE_FAMILY})"
+    echo -e "${YELLOW}${CORE_NOTE}${NC}\n"
 }
 
 # Compare floats (with bc fallback)
@@ -482,9 +545,16 @@ configure_iptables() {
         iptables -t raw -A PREROUTING -p "$proto" --dport "$port" -j NOTRACK
         iptables -t raw -A OUTPUT -p "$proto" --sport "$port" -j NOTRACK
         
-        if [ "$proto" = "tcp" ]; then
+        # RST drop belongs on the raw tunnel port only. On a local SOCKS
+        # port it blackholes RSTs between xray and paqet and leaves
+        # half-open connections. Third arg "local" skips it and clears
+        # a previously installed drop.
+        if [ "$proto" = "tcp" ] && [ "${3:-tunnel}" != "local" ]; then
             iptables -t mangle -D OUTPUT -p tcp --sport "$port" --tcp-flags RST RST -j DROP 2>/dev/null || true
             iptables -t mangle -A OUTPUT -p tcp --sport "$port" --tcp-flags RST RST -j DROP
+        elif [ "$proto" = "tcp" ]; then
+            iptables -t mangle -D OUTPUT -p tcp --sport "$port" --tcp-flags RST RST -j DROP 2>/dev/null || true
+            iptables -t mangle -D OUTPUT -p tcp --dport "$port" --tcp-flags RST RST -j DROP 2>/dev/null || true
         fi
     done
     
@@ -589,9 +659,11 @@ manage_cronjob() {
         echo -e "\n${CYAN}Add/Change Cronjob:${NC}"
         
         local i=1
-        for interval in "${!RESTART_INTERVALS[@]}"; do
+        local intervals=()
+        while IFS= read -r interval; do
+            intervals+=("$interval")
             echo " $((i++)). $interval"
-        done
+        done < <(printf '%s\n' "${!RESTART_INTERVALS[@]}" | sort)
         echo " $i. Remove cronjob"
         echo " 0. Back"
         echo ""
@@ -604,14 +676,7 @@ manage_cronjob() {
             remove_cronjob "$service_name"
             pause
         elif [ "$cron_choice" -ge 1 ] && [ "$cron_choice" -lt "$i" ]; then
-            local idx=1
-            for interval in "${!RESTART_INTERVALS[@]}"; do
-                if [ "$cron_choice" -eq "$idx" ]; then
-                    add_auto_restart_cronjob "$service_name" "$interval"
-                    break
-                fi
-                ((idx++))
-            done
+            add_auto_restart_cronjob "$service_name" "${intervals[$((cron_choice-1))]}"
             pause
         else
             print_error "Invalid choice"
@@ -955,14 +1020,10 @@ get_manual_kcp_settings() {
     
     local rcvwnd=""
     while true; do
-        read -p "[5] rcvwnd [default 2048, 0=skip]: " input
-        if [ -z "$input" ]; then
-            rcvwnd="2048"
-            echo -e "  ${GREEN}→ Using default: 2048${NC}" >&2
-            break
-        elif [ "$input" = "0" ]; then
+        read -p "[5] rcvwnd [Enter=core default, client 2048 / server 4096, 0=skip]: " input
+        if [ -z "$input" ] || [ "$input" = "0" ]; then
             rcvwnd=""
-            echo -e "  ${YELLOW}→ Skipped${NC}" >&2
+            echo -e "  ${YELLOW}→ Skipped, core default applies${NC}" >&2
             break
         elif [[ "$input" =~ ^[0-9]+$ ]] && [ "$input" -ge 128 ]; then
             rcvwnd="$input"
@@ -975,14 +1036,10 @@ get_manual_kcp_settings() {
     
     local sndwnd=""
     while true; do
-        read -p "[6] sndwnd [default 2048, 0=skip]: " input
-        if [ -z "$input" ]; then
-            sndwnd="2048"
-            echo -e "  ${GREEN}→ Using default: 2048${NC}" >&2
-            break
-        elif [ "$input" = "0" ]; then
+        read -p "[6] sndwnd [Enter=core default, client 2048 / server 4096, 0=skip]: " input
+        if [ -z "$input" ] || [ "$input" = "0" ]; then
             sndwnd=""
-            echo -e "  ${YELLOW}→ Skipped${NC}" >&2
+            echo -e "  ${YELLOW}→ Skipped, core default applies${NC}" >&2
             break
         elif [[ "$input" =~ ^[0-9]+$ ]] && [ "$input" -ge 128 ]; then
             sndwnd="$input"
@@ -1148,6 +1205,7 @@ configure_server() {
         read -r config_name
         config_name=$(clean_config_name "${config_name:-server}")
         echo -e "[1/12] Service Name : ${CYAN}$config_name${NC}"
+        load_core_defaults
         
         if [ -f "$CONFIG_DIR/${config_name}.yaml" ]; then
             print_warning "Config '$config_name' already exists!"
@@ -1220,12 +1278,12 @@ configure_server() {
         echo -e "[4/12] KCP Mode : ${CYAN}$mode_name${NC}"
         
         # [5/12] Connections
-        echo -en "${YELLOW}[5/12] Connections [1-32, 0=skip] (default $DEFAULT_CONNECTIONS): ${NC}"
+        echo -en "${YELLOW}[5/12] Connections [1-32, 0=skip] (core default ${CORE_CONN:-unset}): ${NC}"
         read -r conn_input
         local conn=""
         if [ -z "$conn_input" ]; then
-            conn="$DEFAULT_CONNECTIONS"
-            echo -e "[5/12] Connections : ${CYAN}$DEFAULT_CONNECTIONS (default)${NC}"
+            conn="$CORE_CONN"
+            echo -e "[5/12] Connections : ${CYAN}${CORE_CONN:-skipped, binary default}${NC}"
         elif [ "$conn_input" = "0" ]; then
             conn=""
             echo -e "[5/12] Connections : ${CYAN}- (skipped)${NC}"
@@ -1233,18 +1291,17 @@ configure_server() {
             conn="$conn_input"
             echo -e "[5/12] Connections : ${CYAN}$conn_input${NC}"
         else
-            conn="$DEFAULT_CONNECTIONS"
-            echo -e "${YELLOW}Invalid, using default $DEFAULT_CONNECTIONS${NC}"
-            echo -e "[5/12] Connections : ${CYAN}$DEFAULT_CONNECTIONS (corrected)${NC}"
+            conn="$CORE_CONN"
+            echo -e "${YELLOW}Invalid, using core default ${CORE_CONN:-unset}${NC}"
         fi
         
         # [6/12] MTU
-        echo -en "${YELLOW}[6/12] MTU [100-9000, 0=skip] (default $DEFAULT_MTU): ${NC}"
+        echo -en "${YELLOW}[6/12] MTU [100-9000, 0=skip] (core default ${CORE_MTU:-unset}): ${NC}"
         read -r mtu_input
         local mtu=""
         if [ -z "$mtu_input" ]; then
-            mtu="$DEFAULT_MTU"
-            echo -e "[6/12] MTU : ${CYAN}$DEFAULT_MTU (default)${NC}"
+            mtu="$CORE_MTU"
+            echo -e "[6/12] MTU : ${CYAN}${CORE_MTU:-skipped, binary default}${NC}"
         elif [ "$mtu_input" = "0" ]; then
             mtu=""
             echo -e "[6/12] MTU : ${CYAN}- (skipped)${NC}"
@@ -1252,27 +1309,26 @@ configure_server() {
             mtu="$mtu_input"
             echo -e "[6/12] MTU : ${CYAN}$mtu_input${NC}"
         else
-            mtu="$DEFAULT_MTU"
-            echo -e "${YELLOW}Invalid, using default $DEFAULT_MTU${NC}"
-            echo -e "[6/12] MTU : ${CYAN}$DEFAULT_MTU (corrected)${NC}"
+            mtu="$CORE_MTU"
+            echo -e "${YELLOW}Invalid, using core default ${CORE_MTU:-unset}${NC}"
         fi
         
         # [7/12] Encryption
         echo -e "\n${CYAN}Encryption Selection${NC}"
         echo -e "────────────────────────────────────────────────────────────────"
-        for enc_key in 1 2 3 4 5 6 7; do
+        for enc_key in $(printf "%s\n" "${!ENCRYPTION_OPTIONS[@]}" | sort -n); do
             IFS=':' read -r enc_name enc_desc <<< "${ENCRYPTION_OPTIONS[$enc_key]}"
             echo " [${enc_key}] ${enc_name} - ${enc_desc}"
         done
         echo ""
         
         local enc_choice
-        read -p "[7/12] Choose encryption [1-7] (default 1): " enc_choice
-        enc_choice="${enc_choice:-1}"
+        read -p "[7/12] Choose encryption [1-11] (default ${CORE_ENC:-2}, aes): " enc_choice
+        enc_choice="${enc_choice:-${CORE_ENC:-2}}"
         
         local block
         IFS=':' read -r block _ <<< "${ENCRYPTION_OPTIONS[$enc_choice]}"
-        block="${block:-aes-128-gcm}"
+        block="${block:-aes}"
         echo -e "[7/12] Encryption : ${CYAN}$block${NC}"
         
         # [8/12] pcap sockbuf
@@ -1406,7 +1462,7 @@ configure_server() {
             echo -e "┌──────────────────────────────────────────────────────────────┐"
             printf "│ %-14s : %-44s │\n" "Public IP" "$public_ip"
             printf "│ %-14s : %-44s │\n" "Listen Port" "$port"
-            printf "│ %-14s : %-44s │\n" "Connections" "${conn:-1}"
+            printf "│ %-14s : %-44s │\n" "Connections" "${conn:-3}"
             printf "│ %-14s : %-44s │\n" "Auto Restart" "Every ${DEFAULT_AUTO_RESTART_INTERVAL}"
             echo -e "└──────────────────────────────────────────────────────────────┘\n"
             
@@ -1491,6 +1547,7 @@ configure_client() {
         read -r config_name
         config_name=$(clean_config_name "${config_name:-client}")
         echo -e "[1/15] Service Name : ${CYAN}$config_name${NC}"
+        load_core_defaults
         
         if [ -f "$CONFIG_DIR/${config_name}.yaml" ]; then
             print_warning "Config already exists!"
@@ -1550,12 +1607,12 @@ configure_client() {
         echo -e "[5/15] KCP Mode : ${CYAN}$mode_name${NC}"
         
         # [6/15] Connections
-        echo -en "${YELLOW}[6/15] Connections [1-32, 0=skip] (default $DEFAULT_CONNECTIONS): ${NC}"
+        echo -en "${YELLOW}[6/15] Connections [1-32, 0=skip] (core default ${CORE_CONN:-unset}): ${NC}"
         read -r conn_input
         local conn=""
         if [ -z "$conn_input" ]; then
-            conn="$DEFAULT_CONNECTIONS"
-            echo -e "[6/15] Connections : ${CYAN}$DEFAULT_CONNECTIONS (default)${NC}"
+            conn="$CORE_CONN"
+            echo -e "[6/15] Connections : ${CYAN}${CORE_CONN:-skipped, binary default}${NC}"
         elif [ "$conn_input" = "0" ]; then
             conn=""
             echo -e "[6/15] Connections : ${CYAN}- (skipped)${NC}"
@@ -1563,18 +1620,17 @@ configure_client() {
             conn="$conn_input"
             echo -e "[6/15] Connections : ${CYAN}$conn_input${NC}"
         else
-            conn="$DEFAULT_CONNECTIONS"
-            echo -e "${YELLOW}Invalid, using default $DEFAULT_CONNECTIONS${NC}"
-            echo -e "[6/15] Connections : ${CYAN}$DEFAULT_CONNECTIONS (corrected)${NC}"
+            conn="$CORE_CONN"
+            echo -e "${YELLOW}Invalid, using core default ${CORE_CONN:-unset}${NC}"
         fi
         
         # [7/15] MTU
-        echo -en "${YELLOW}[7/15] MTU [100-9000, 0=skip] (default $DEFAULT_MTU): ${NC}"
+        echo -en "${YELLOW}[7/15] MTU [100-9000, 0=skip] (core default ${CORE_MTU:-unset}): ${NC}"
         read -r mtu_input
         local mtu=""
         if [ -z "$mtu_input" ]; then
-            mtu="$DEFAULT_MTU"
-            echo -e "[7/15] MTU : ${CYAN}$DEFAULT_MTU (default)${NC}"
+            mtu="$CORE_MTU"
+            echo -e "[7/15] MTU : ${CYAN}${CORE_MTU:-skipped, binary default}${NC}"
         elif [ "$mtu_input" = "0" ]; then
             mtu=""
             echo -e "[7/15] MTU : ${CYAN}- (skipped)${NC}"
@@ -1582,27 +1638,26 @@ configure_client() {
             mtu="$mtu_input"
             echo -e "[7/15] MTU : ${CYAN}$mtu_input${NC}"
         else
-            mtu="$DEFAULT_MTU"
-            echo -e "${YELLOW}Invalid, using default $DEFAULT_MTU${NC}"
-            echo -e "[7/15] MTU : ${CYAN}$DEFAULT_MTU (corrected)${NC}"
+            mtu="$CORE_MTU"
+            echo -e "${YELLOW}Invalid, using core default ${CORE_MTU:-unset}${NC}"
         fi
         
         # [8/15] Encryption
         echo -e "\n${CYAN}Encryption Selection${NC}"
         echo -e "────────────────────────────────────────────────────────────────"
-        for enc_key in 1 2 3 4 5 6 7; do
+        for enc_key in $(printf "%s\n" "${!ENCRYPTION_OPTIONS[@]}" | sort -n); do
             IFS=':' read -r enc_name enc_desc <<< "${ENCRYPTION_OPTIONS[$enc_key]}"
             echo " [${enc_key}] ${enc_name} - ${enc_desc}"
         done
         echo ""
         
         local enc_choice
-        read -p "[8/15] Choose encryption [1-7] (default 1): " enc_choice
-        enc_choice="${enc_choice:-1}"
+        read -p "[8/15] Choose encryption [1-11] (default ${CORE_ENC:-2}, aes): " enc_choice
+        enc_choice="${enc_choice:-2}"
         
         local block
         IFS=':' read -r block _ <<< "${ENCRYPTION_OPTIONS[$enc_choice]}"
-        block="${block:-aes-128-gcm}"
+        block="${block:-aes}"
         echo -e "[8/15] Encryption : ${CYAN}$block${NC}"
         
          # [9/15] pcap sockbuf
@@ -1737,7 +1792,7 @@ configure_client() {
                 echo -e "[13/15] SOCKS5 Port : ${CYAN}$socks_port${NC}"
                 
                 check_port_conflict "$socks_port" || { pause "Press Enter to retry..."; continue; }
-                configure_iptables "$socks_port" "tcp"
+                configure_iptables "$socks_port" "tcp" "local"
                 
                 echo -e "\n${CYAN}SOCKS5 Authentication (Optional)${NC}"
                 echo -e "────────────────────────────────────────────────────────────────"
@@ -1889,7 +1944,7 @@ configure_client() {
                 fi
             fi
             
-            printf "│ %-16s : %-42s │\n" "Connections" "${conn:-1}"
+            printf "│ %-16s : %-42s │\n" "Connections" "${conn:-3}"
             printf "│ %-16s : %-42s │\n" "Auto Restart" "Every ${DEFAULT_AUTO_RESTART_INTERVAL}"
             echo -e "└──────────────────────────────────────────────────────────────┘\n"
             
@@ -2452,7 +2507,9 @@ install_paqet() {
     echo -e " OS: ${CYAN}$os${NC}"
     echo -e " Arch: ${CYAN}$arch${NC}"
     echo -e " Current Version: ${CYAN}$current_version${NC}"
-    echo -e " Latest Version: ${CYAN}$latest_version${NC}\n"
+    echo -e " Latest upstream: ${CYAN}$latest_version${NC}"
+    echo -e " ${YELLOW}GitHub latest is hanselime/paqet, not the v2.5 optimized core.${NC}"
+    echo -e " ${YELLOW}Client and server must run the same family. v2.5 does not speak alpha.21.${NC}\n"
     mkdir -p "/root/paqet"
     local arch_name=""
     case $arch in
@@ -2491,6 +2548,11 @@ install_paqet() {
     
     case $install_choice in
         1)
+            if [[ "$current_version" == v2.* ]]; then
+                echo -e "${RED}Installed core is ${current_version}. GitHub latest is a different wire protocol.${NC}"
+                read -p "Replace it with upstream ${latest_version}? (y/N): " replace_opt
+                [[ ! "$replace_opt" =~ ^[Yy]$ ]] && return 0
+            fi
             print_info "Downloading latest version ($latest_version) from GitHub for $os/$arch_name..."
             
             if ! curl -fsSL "$download_url" -o "/tmp/paqet.tar.gz" 2>/dev/null; then
@@ -2525,7 +2587,7 @@ install_paqet() {
             if [ ${#local_files[@]} -eq 0 ]; then
                 print_error "No valid paqet archives found in /root/paqet"
                 echo -e "\n${YELLOW}Expected filename format:${NC} paqet-linux-{arch}-{version}.tar.gz"
-                echo -e "${YELLOW}Example:${NC} paqet-linux-amd64-v1.0.0-alpha.16.tar.gz"
+                echo -e "${YELLOW}Example:${NC} paqet-linux-amd64-v2.5.0.tar.gz"
                 pause
                 return 1
             fi
@@ -2657,9 +2719,15 @@ install_paqet() {
     
     if [ -n "$binary_file" ] && [ -f "$binary_file" ]; then
         print_info "Found binary: $(basename "$binary_file")"
-        rm -f "$BIN_DIR/paqet"
-        cp "$binary_file" "$BIN_DIR/paqet"
-        chmod +x "$BIN_DIR/paqet"
+        tmp_bin="$BIN_DIR/paqet.new"
+        cp "$binary_file" "$tmp_bin"
+        chmod +x "$tmp_bin"
+        if ! "$tmp_bin" version >/dev/null 2>&1; then
+            print_warning "New binary did not print a version; keeping the installed one"
+            rm -f "$tmp_bin"
+        else
+            mv -f "$tmp_bin" "$BIN_DIR/paqet"
+        fi
         
         print_success "Paqet installed to $BIN_DIR/paqet"
         
@@ -2700,30 +2768,31 @@ install_paqet() {
     return 0
 }
 
-# Install manager script
+# Install manager script from the file that is actually running.
+# GitHub main is still 7.0 and must not replace this build.
 install_manager_script() {
     clear
     show_banner
     print_step "Installing Paqet Manager script...\n"
-    
-    local manager_url="https://raw.githubusercontent.com/${MANAGER_GITHUB_REPO}/main/paqet-manager.sh"
-    
-    print_info "Downloading from: $manager_url"
-    
-    if curl -fsSL "$manager_url" -o "$MANAGER_PATH" 2>/dev/null; then
-        chmod +x "$MANAGER_PATH"
-        print_success "✅ Paqet Manager installed to $MANAGER_PATH"
-        echo -e "\n${GREEN}You can now run the manager using command:${NC}"
-        echo -e " ${CYAN}paqet-manager${NC}"
-        echo -e "\n${YELLOW}Note: You may need to log out and back in for the command to be available.${NC}"
-    else
-        print_error "Failed to download manager script"
-        pause
-        return 1
-    fi
-    
+    ensure_manager_command
+    print_success "Paqet Manager installed to $MANAGER_PATH"
+    echo -e "\n${GREEN}Run the menu with:${NC} ${CYAN}paqet-manager${NC}"
     pause
     return 0
+}
+
+ensure_manager_command() {
+    local src
+    src=$(readlink -f "$0" 2>/dev/null || echo "$0")
+    mkdir -p "$(dirname "$MANAGER_PATH")"
+    if [ ! -f "$src" ]; then
+        print_warning "Could not locate this script to install the command"
+        return 1
+    fi
+    if [ "$src" != "$MANAGER_PATH" ]; then
+        cp "$src" "$MANAGER_PATH"
+    fi
+    chmod +x "$MANAGER_PATH"
 }
 
 # Update manager script
@@ -2747,6 +2816,15 @@ update_manager_script() {
     print_info "Backup created at $backup_path"
     
     local manager_url="https://raw.githubusercontent.com/${MANAGER_GITHUB_REPO}/main/paqet-manager.sh"
+    
+    print_warning "This downloads main/paqet-manager.sh. Older 7.0 is paqet-manager7-0.sh in Switch version."
+    print_info "Updating replaces the local manager. A backup is kept."
+    read -p "Download and replace anyway? (y/N): " confirm_update
+    if [[ ! "$confirm_update" =~ ^[Yy]$ ]]; then
+        print_info "Update cancelled"
+        pause
+        return 0
+    fi
     
     print_info "Downloading latest version..."
     
@@ -3554,7 +3632,7 @@ change_conn_all_services() {
     while IFS= read -r -d '' file; do
         configs+=("$file")
         local config_name=$(basename "$file" .yaml)
-        local current_conn=$(grep "^conn:" "$file" 2>/dev/null | head -1 | awk '{print $2}' | tr -d '"')
+        local current_conn=$(grep -E "^[[:space:]]*conn:" "$file" 2>/dev/null | head -1 | awk '{print $2}' | tr -d '"')
         echo -e " ${config_name}: ${current_conn:-Not set (using default: $DEFAULT_CONNECTIONS)}"
     done < <(find "$CONFIG_DIR" -name "*.yaml" -type f -print0 2>/dev/null)
     
@@ -3573,17 +3651,14 @@ change_conn_all_services() {
     for config in "${configs[@]}"; do
         local config_name=$(basename "$config" .yaml)
         
-        if grep -q "^conn:" "$config"; then
-            sed -i "s/^conn:.*/conn: $new_conn/" "$config"
+        if grep -qE '^[[:space:]]*conn:' "$config"; then
+            sed -i -E "s/^([[:space:]]*)conn:.*/\1conn: $new_conn/" "$config"
             echo -e " ${GREEN}✓${NC} Updated $config_name"
             ((modified++))
-        else
-            # Add under transport section
-            if grep -q "transport:" "$config"; then
-                sed -i "/transport:/a \  conn: $new_conn" "$config"
-                echo -e " ${GREEN}✓${NC} Added conn to $config_name"
-                ((modified++))
-            fi
+        elif grep -q "transport:" "$config"; then
+            sed -i "/transport:/a \  conn: $new_conn" "$config"
+            echo -e " ${GREEN}✓${NC} Added conn to $config_name"
+            ((modified++))
         fi
     done
     
@@ -3608,28 +3683,24 @@ change_block_all_services() {
     
     echo -e "${CYAN}Available Encryption Options:${NC}"
     echo -e "────────────────────────────────────────────────────────────────"
-    echo -e " ${GREEN}[1]${NC} aes-128-gcm - Very high security / Very fast / Recommended"
-    echo -e " ${GREEN}[2]${NC} aes         - High security / Medium speed / General use"
-    echo -e " ${GREEN}[3]${NC} aes-128     - High security / Fast / Low CPU usage"
-    echo -e " ${GREEN}[4]${NC} aes-192     - Very high security / Medium speed / Moderate CPU"
-    echo -e " ${GREEN}[5]${NC} aes-256     - Maximum security / Slower / Higher CPU"
-    echo -e " ${GREEN}[6]${NC} none        - No encryption / Max speed / Insecure"
-    echo -e " ${GREEN}[7]${NC} null        - No encryption / Max speed / Insecure"
+    local enc_keys=()
+    while IFS= read -r enc_key; do
+        enc_keys+=("$enc_key")
+        IFS=':' read -r enc_name enc_desc <<< "${ENCRYPTION_OPTIONS[$enc_key]}"
+        echo -e " ${GREEN}[${enc_key}]${NC} ${enc_name} - ${enc_desc}"
+    done < <(printf '%s\n' "${!ENCRYPTION_OPTIONS[@]}" | sort -n)
     echo ""
     
-    read -p "Select encryption [1-7]: " enc_choice
+    local enc_max="${enc_keys[-1]}"
+    read -p "Select encryption [1-${enc_max}]: " enc_choice
     
     local new_block=""
-    case $enc_choice in
-        1) new_block="aes-128-gcm" ;;
-        2) new_block="aes" ;;
-        3) new_block="aes-128" ;;
-        4) new_block="aes-192" ;;
-        5) new_block="aes-256" ;;
-        6) new_block="none" ;;
-        7) new_block="null" ;;
-        *) print_error "Invalid choice"; return ;;
-    esac
+    if [ -n "${ENCRYPTION_OPTIONS[$enc_choice]}" ]; then
+        IFS=':' read -r new_block _ <<< "${ENCRYPTION_OPTIONS[$enc_choice]}"
+    else
+        print_error "Invalid choice"
+        return
+    fi
     
     echo -e "\n${YELLOW}Applying block='$new_block' to all configurations...${NC}"
     
@@ -5679,7 +5750,7 @@ main_menu() {
         echo -e "${CYAN}2.${NC}🌍 Configure as Server (kharej)"
         echo -e "${CYAN}3.${NC}🇮🇷 Configure as Client (Iran) [Port Forwarding / SOCKS5]"
         echo -e "${CYAN}4.${NC}🛠️  Manage Services"
-        echo -e "${CYAN}5.${NC}🔄 Manage All Services (Restart/Logs/Delete)"
+        echo -e "${CYAN}5.${NC}🔄 Manage All Services (protection, NAT, logs, bulk config)"
         echo -e "${CYAN}6.${NC}📊 Test Connection"
         echo -e "${CYAN}7.${NC}🚀 Optimize Server"
         echo -e "${CYAN}8.${NC}🗑️  Uninstall Paqet"
@@ -5716,4 +5787,5 @@ main_menu() {
 # ================================================
 
 check_root
+ensure_manager_command
 main_menu
