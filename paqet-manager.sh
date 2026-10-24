@@ -1,8 +1,8 @@
 #!/bin/bash
 #=================================================
 # Paqet Tunnel Manager
-# Version: 7.2
-# Tuned for optimized core v2.5.0, not alpha.21
+# Version: 7.3
+# Version 7.3 - Added version selection for upstream and optimized releases - and deleted auto cronjob
 # Raw packet-level tunneling for bypassing network restrictions
 # GitHub: https://github.com/hanselime/paqet
 # Manager GitHub: https://github.com/behzadea12/Paqet-Tunnel-Manager
@@ -25,7 +25,7 @@ readonly PURPLE='\033[0;35m'
 readonly NC='\033[0m'
 
 # Script Configuration
-readonly SCRIPT_VERSION="7.2"
+readonly SCRIPT_VERSION="7.3"
 readonly MANAGER_NAME="paqet-manager"
 readonly MANAGER_PATH="/usr/local/bin/$MANAGER_NAME"
 
@@ -139,6 +139,7 @@ readonly COMMON_PORTS=("443" "80" "22" "53")
 declare -A MANAGER_VERSIONS=(
     ["latest"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh"
     ["7.2"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh"
+    ["7.3"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager.sh"
     ["7.0"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager7-0.sh"
     ["6.0"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager6-0.sh"
     ["5.1"]="https://raw.githubusercontent.com/behzadea12/Paqet-Tunnel-Manager/main/paqet-manager5-1.sh"
@@ -431,6 +432,73 @@ get_latest_paqet_version() {
         echo "$version"
     else
         echo "v2.5.0"
+    fi
+}
+
+
+# Select a version from GitHub releases of a repo
+# Sets global SELECTED_VERSION on success, returns 0
+select_github_release() {
+    local repo="$1"
+    local title="$2"
+    clear
+    show_banner
+    print_step "$title\n"
+    
+    local tags=()
+    # Fetch releases and keep only non-prerelease tags
+    mapfile -t tags < <(curl -s "https://api.github.com/repos/${repo}/releases?per_page=50" | \
+        awk '
+            /"tag_name":/ { tag=$2; gsub(/[",]/, "", tag) }
+            /"prerelease":/ {
+                if ($2 == "false,") print tag
+            }
+        ' | head -20)
+    
+    if [ ${#tags[@]} -eq 0 ]; then
+        print_error "Could not fetch releases from $repo"
+        pause
+        return 1
+    fi
+    
+    echo -e "${YELLOW}Available versions from ${repo}:${NC}\n"
+    for i in "${!tags[@]}"; do
+        echo -e " $((i+1)). ${CYAN}${tags[$i]}${NC}"
+    done
+    echo -e " 0. ${YELLOW}Cancel${NC}\n"
+    
+    local choice
+    read -p "Select version [0-${#tags[@]}]: " choice
+    if [[ "$choice" == "0" ]]; then
+        return 1
+    fi
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#tags[@]} )); then
+        SELECTED_VERSION="${tags[$((choice-1))]}"
+        print_success "Selected: $SELECTED_VERSION"
+        return 0
+    else
+        print_error "Invalid selection"
+        pause
+        return 1
+    fi
+}
+
+# Get best matching asset download URL for a release and architecture
+get_release_asset_url() {
+    local repo="$1"
+    local tag="$2"
+    local arch_name="$3"
+    local assets_json
+    assets_json=$(curl -s "https://api.github.com/repos/${repo}/releases/tags/${tag}")
+    local url
+    # Prefer exact arch match with linux
+    url=$(echo "$assets_json" | grep -o '"browser_download_url": "[^"]*"' | cut -d'"' -f4 | grep -i "linux" | grep -i "${arch_name}" | head -1)
+    if [ -z "$url" ]; then
+        # fallback any linux
+        url=$(echo "$assets_json" | grep -o '"browser_download_url": "[^"]*"' | cut -d'"' -f4 | grep -i "linux" | head -1)
+    fi
+    if [ -n "$url" ]; then
+        echo "$url"
     fi
 }
 
@@ -1452,8 +1520,6 @@ configure_server() {
         
         if systemctl is-active --quiet "$svc"; then
             print_success "Server started successfully"
-            add_auto_restart_cronjob "$svc" "$DEFAULT_AUTO_RESTART_INTERVAL" >/dev/null 2>&1
-            
             echo -e "\n${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
             echo -e "${GREEN}║ Server Ready                                                  ║${NC}"
             echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}\n"
@@ -1463,7 +1529,7 @@ configure_server() {
             printf "│ %-14s : %-44s │\n" "Public IP" "$public_ip"
             printf "│ %-14s : %-44s │\n" "Listen Port" "$port"
             printf "│ %-14s : %-44s │\n" "Connections" "${conn:-3}"
-            printf "│ %-14s : %-44s │\n" "Auto Restart" "Every ${DEFAULT_AUTO_RESTART_INTERVAL}"
+            printf "│ %-14s : %-44s │\n" "Auto Restart" "Not set (manual)"
             echo -e "└──────────────────────────────────────────────────────────────┘\n"
             
             echo -e "${YELLOW}Secret Key (Client Configuration)${NC}"
@@ -1921,8 +1987,6 @@ configure_client() {
         
         if systemctl is-active --quiet "$svc"; then
             print_success "Client started successfully"
-            add_auto_restart_cronjob "$svc" "$DEFAULT_AUTO_RESTART_INTERVAL" >/dev/null 2>&1
-            
             echo -e "\n${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
             echo -e "${GREEN}║ Client Ready                                                   ║${NC}"
             echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}\n"
@@ -1945,7 +2009,7 @@ configure_client() {
             fi
             
             printf "│ %-16s : %-42s │\n" "Connections" "${conn:-3}"
-            printf "│ %-16s : %-42s │\n" "Auto Restart" "Every ${DEFAULT_AUTO_RESTART_INTERVAL}"
+            printf "│ %-16s : %-42s │\n" "Auto Restart" "Not set (manual)"
             echo -e "└──────────────────────────────────────────────────────────────┘\n"
             
             echo -e "${YELLOW}KCP Configuration${NC}"
@@ -2520,47 +2584,44 @@ install_paqet() {
         *) arch_name="$arch" ;;
     esac
     
-    local expected_file="paqet-linux-${arch_name}-${latest_version}.tar.gz"
-    local download_url="https://github.com/${GITHUB_REPO}/releases/download/${latest_version}/${expected_file}"
-    
-    echo -e "${YELLOW}Download URL:${NC} ${CYAN}$download_url${NC}\n"
     
     echo -e "${GREEN}══════════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN} paqet core${NC}"
     echo -e "${GREEN}══════════════════════════════════════════════════════════════${NC}"
     echo -e "${YELLOW}Installation Options paqet core:${NC}"
-    echo -e " 1) ${GREEN}Download/Update from GitHub (latest: $latest_version)${NC}"
+    echo -e " 1) ${GREEN}Download/Update from upstream GitHub (hanselime/paqet) - select version${NC}"
     echo -e " 2) ${CYAN}Use local file from /root/paqet/${NC}"
     echo -e " 3) ${PURPLE}Download from custom URL${NC}"
+    echo -e " 4) ${MAGENTA}Download from optimized releases (behzadea12) - select version${NC}"
     echo -e ""
     echo -e "${GREEN}══════════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN} paqet manager${NC}"
     echo -e "${GREEN}══════════════════════════════════════════════════════════════${NC}"
     echo -e "${YELLOW}Installation Options paqet manager:${NC}"
-    echo -e " 4) ${BLUE}Install script${NC}"
-    echo -e " 5) ${BLUE}Update script${NC}"
-    echo -e " 6) ${BLUE}Switch version${NC}"
-    echo -e " 7) ${RED}Uninstall script${NC}"
+    echo -e " 5) ${BLUE}Install script${NC}"
+    echo -e " 6) ${BLUE}Update script${NC}"
+    echo -e " 7) ${BLUE}Switch version${NC}"
+    echo -e " 8) ${RED}Uninstall script${NC}"
     echo -e ""
     echo -e " 0) ${YELLOW}↩️ Back to main menu${NC}\n"
     
-    read -p "Choose option [0-7]: " install_choice
+    read -p "Choose option [0-8]: " install_choice
     
     case $install_choice in
         1)
-            if [[ "$current_version" == v2.* ]]; then
-                echo -e "${RED}Installed core is ${current_version}. GitHub latest is a different wire protocol.${NC}"
-                read -p "Replace it with upstream ${latest_version}? (y/N): " replace_opt
-                [[ ! "$replace_opt" =~ ^[Yy]$ ]] && return 0
+            if ! select_github_release "$GITHUB_REPO" "Select Upstream Paqet Version"; then
+                return 0
             fi
-            print_info "Downloading latest version ($latest_version) from GitHub for $os/$arch_name..."
-            
+            local selected_version="$SELECTED_VERSION"
+            local expected_file="paqet-linux-${arch_name}-${selected_version}.tar.gz"
+            local download_url="https://github.com/${GITHUB_REPO}/releases/download/${selected_version}/${expected_file}"
+            print_info "Downloading version $selected_version from upstream for $os/$arch_name..."
             if ! curl -fsSL "$download_url" -o "/tmp/paqet.tar.gz" 2>/dev/null; then
                 print_error "Download failed from GitHub"
                 echo -e "\n${YELLOW}Please check:${NC}"
                 echo -e " 1. Internet connection"
                 echo -e " 2. GitHub repository access"
-                echo -e " 3. The version $latest_version exists"
+                echo -e " 3. The version $selected_version exists for this architecture"
                 echo -e "\n${YELLOW}You can also:${NC}"
                 echo -e " - Try again later"
                 echo -e " - Download manually from: $download_url"
@@ -2569,9 +2630,35 @@ install_paqet() {
                 pause
                 return 1
             else
-                print_success "Downloaded version ${latest_version}"
+                print_success "Downloaded version ${selected_version}"
                 cp "/tmp/paqet.tar.gz" "/root/paqet/$expected_file" 2>/dev/null && \
                 print_info "Saved copy to /root/paqet/$expected_file for future use"
+            fi
+            ;;
+        4)
+            if ! select_github_release "$MANAGER_GITHUB_REPO" "Select Optimized Core Version (behzadea12)"; then
+                return 0
+            fi
+            local selected_version="$SELECTED_VERSION"
+            local download_url
+            download_url=$(get_release_asset_url "$MANAGER_GITHUB_REPO" "$selected_version" "$arch_name")
+            if [ -z "$download_url" ]; then
+                # fallback constructed name
+                local expected_file="paqet-linux-${arch_name}-${selected_version}.tar.gz"
+                download_url="https://github.com/${MANAGER_GITHUB_REPO}/releases/download/${selected_version}/${expected_file}"
+            fi
+            print_info "Downloading optimized version $selected_version for $os/$arch_name..."
+            if ! curl -fsSL "$download_url" -o "/tmp/paqet.tar.gz" 2>/dev/null; then
+                print_error "Download failed from optimized releases"
+                echo -e "\n${YELLOW}URL tried:${NC} $download_url"
+                echo -e "Possible issues: no asset for this architecture, or release has no binaries (e.g. private/pre-release)."
+                pause
+                return 1
+            else
+                print_success "Downloaded version ${selected_version}"
+                local saved_name=$(basename "$download_url")
+                cp "/tmp/paqet.tar.gz" "/root/paqet/$saved_name" 2>/dev/null && \
+                print_info "Saved copy to /root/paqet/$saved_name for future use"
             fi
             ;;
         2)
@@ -2659,19 +2746,19 @@ install_paqet() {
                 print_success "Downloaded from custom URL"
             fi
             ;;
-        4)
+        5)
             install_manager_script
             return 0
             ;;
-        5)
+        6)
             update_manager_script
             return 0
             ;;
-        6)
+        7)
             switch_manager_version
             return 0
             ;;
-        7)
+        8)
             uninstall_manager_script
             return 0
             ;;
@@ -2735,10 +2822,6 @@ install_paqet() {
         new_version=$("$BIN_DIR/paqet" version 2>/dev/null | grep "^Version:" | head -1 | cut -d':' -f2 | xargs)
         if [ -n "$new_version" ]; then
             print_info "Installed version: ${CYAN}$new_version${NC}"
-            
-            if [ "$new_version" != "$latest_version" ]; then
-                print_warning "Expected version $latest_version but got $new_version"
-            fi
         else
             print_warning "Could not determine installed version"
         fi
