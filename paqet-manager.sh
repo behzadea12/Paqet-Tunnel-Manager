@@ -2,7 +2,7 @@
 #=================================================
 # Paqet Tunnel Manager
 # Version: 7.3
-# Version 7.3 - Added version selection for upstream and optimized releases - and deleted auto cronjob
+# Version 7.3 - Added version selection for upstream and optimized releases
 # Raw packet-level tunneling for bypassing network restrictions
 # GitHub: https://github.com/hanselime/paqet
 # Manager GitHub: https://github.com/behzadea12/Paqet-Tunnel-Manager
@@ -1467,7 +1467,7 @@ configure_server() {
             echo "# Paqet Server Configuration"
             echo "role: \"server\""
             echo "log:"
-            echo "  level: \"info\""
+            echo "  level: \"error\""
             echo "listen:"
             echo "  addr: \":$port\""
             echo "network:"
@@ -1921,7 +1921,7 @@ configure_client() {
             echo "# Paqet Client Configuration"
             echo "role: \"client\""
             echo "log:"
-            echo "  level: \"info\""
+            echo "  level: \"error\""
             
             if [ ${#forward_entries[@]} -gt 0 ]; then
                 echo "forward:"
@@ -3401,6 +3401,144 @@ install_mirror_selector() {
 
 # Optimization menu
 # Optimization menu
+
+# ================================================
+# DISK CLEANUP & LOG MANAGEMENT
+# ================================================
+
+disk_cleanup_menu() {
+    while true; do
+        clear
+        show_banner
+        echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║ Disk Cleanup & Log Optimization                         ║${NC}"
+        echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}\n"
+        
+        echo -e "${CYAN}Current disk usage:${NC}"
+        df -h / | tail -1 | awk '{print "  Used: "$3" / "$2" ("$5")"}'
+        echo ""
+        
+        echo -e "${YELLOW}Actions:${NC}"
+        echo -e " 1) ${GREEN}Quick cleanup now${NC} (journal + apt/yum cache + tmp)"
+        echo -e " 2) ${CYAN}Aggressive cleanup${NC} (also old logs, package caches)"
+        echo -e " 3) ${PURPLE}Show largest log files${NC}"
+        echo -e " 4) ${BLUE}Schedule automatic cleanup${NC} (cron)"
+        echo -e " 5) ${ORANGE}Remove scheduled cleanup${NC}"
+        echo -e " 0) ${YELLOW}Back${NC}"
+        echo ""
+        
+        read -p "Select option [0-5]: " choice
+        
+        case $choice in
+            1) disk_cleanup_quick ;;
+            2) disk_cleanup_aggressive ;;
+            3) show_large_logs ;;
+            4) schedule_disk_cleanup ;;
+            5) remove_disk_cleanup_cron ;;
+            0) return ;;
+            *) print_error "Invalid option"; sleep 1 ;;
+        esac
+    done
+}
+
+disk_cleanup_quick() {
+    print_step "Running quick disk cleanup..."
+    echo ""
+    
+    # Journal vacuum (keep last 2 days or 100MB)
+    if command -v journalctl >/dev/null 2>&1; then
+        print_info "Cleaning systemd journal..."
+        journalctl --vacuum-time=2d --vacuum-size=100M >/dev/null 2>&1 && print_success "Journal cleaned" || print_warning "Journal clean skipped"
+    fi
+    
+    # Package manager cache
+    if command -v apt-get >/dev/null 2>&1; then
+        print_info "Cleaning apt cache..."
+        apt-get clean >/dev/null 2>&1 && print_success "apt cache cleaned"
+    elif command -v yum >/dev/null 2>&1; then
+        yum clean all >/dev/null 2>&1 && print_success "yum cache cleaned"
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf clean all >/dev/null 2>&1 && print_success "dnf cache cleaned"
+    fi
+    
+    # Temp files
+    print_info "Cleaning /tmp and /var/tmp..."
+    find /tmp -type f -atime +1 -delete 2>/dev/null
+    find /var/tmp -type f -atime +1 -delete 2>/dev/null
+    print_success "Temp files cleaned"
+    
+    echo ""
+    print_success "Quick cleanup finished"
+    echo -e "${CYAN}Disk usage now:${NC}"
+    df -h / | tail -1 | awk '{print "  Used: "$3" / "$2" ("$5")"}'
+    echo ""
+    pause
+}
+
+disk_cleanup_aggressive() {
+    print_warning "This will remove more logs and caches. Continue?"
+    read -p "Type YES to confirm: " confirm
+    [[ "$confirm" != "YES" ]] && { print_info "Cancelled"; pause; return; }
+    
+    disk_cleanup_quick
+    
+    print_info "Removing old compressed logs..."
+    find /var/log -name "*.gz" -mtime +7 -delete 2>/dev/null
+    find /var/log -name "*.1" -mtime +3 -delete 2>/dev/null
+    print_success "Old rotated logs removed"
+    
+    # Extra journal vacuum
+    journalctl --vacuum-time=1d --vacuum-size=50M >/dev/null 2>&1
+    
+    echo ""
+    print_success "Aggressive cleanup finished"
+    df -h / | tail -1 | awk '{print "  Used: "$3" / "$2" ("$5")"}'
+    echo ""
+    pause
+}
+
+show_large_logs() {
+    print_step "Largest files in /var/log (top 15):"
+    echo ""
+    find /var/log -type f -exec du -h {} + 2>/dev/null | sort -rh | head -15
+    echo ""
+    pause
+}
+
+schedule_disk_cleanup() {
+    clear
+    show_banner
+    print_step "Schedule automatic disk cleanup\n"
+    
+    echo -e " 1) Daily at 04:00"
+    echo -e " 2) Weekly (Sunday 04:00)"
+    echo -e " 3) Every 3 days at 04:00"
+    echo -e " 0) Cancel"
+    echo ""
+    read -p "Select schedule: " sch
+    
+    local cron_line=""
+    case $sch in
+        1) cron_line="0 4 * * * /usr/bin/journalctl --vacuum-time=2d --vacuum-size=100M >/dev/null 2>&1; apt-get clean >/dev/null 2>&1; find /tmp /var/tmp -type f -atime +2 -delete >/dev/null 2>&1" ;;
+        2) cron_line="0 4 * * 0 /usr/bin/journalctl --vacuum-time=2d --vacuum-size=100M >/dev/null 2>&1; apt-get clean >/dev/null 2>&1; find /tmp /var/tmp -type f -atime +2 -delete >/dev/null 2>&1" ;;
+        3) cron_line="0 4 */3 * * /usr/bin/journalctl --vacuum-time=2d --vacuum-size=100M >/dev/null 2>&1; apt-get clean >/dev/null 2>&1; find /tmp /var/tmp -type f -atime +2 -delete >/dev/null 2>&1" ;;
+        *) return ;;
+    esac
+    
+    # Remove old if exists
+    crontab -l 2>/dev/null | grep -v "journalctl --vacuum-time" | crontab - 2>/dev/null
+    (crontab -l 2>/dev/null; echo "$cron_line") | crontab -
+    
+    print_success "Scheduled cleanup added"
+    pause
+}
+
+remove_disk_cleanup_cron() {
+    crontab -l 2>/dev/null | grep -v "journalctl --vacuum-time" | crontab - 2>/dev/null
+    print_success "Scheduled cleanup removed (if existed)"
+    pause
+}
+
 optimize_server() {
     while true; do
         clear
@@ -3413,10 +3551,11 @@ optimize_server() {
         echo -e "${CYAN}2.${NC} ${PURPLE}DNS Finder${NC} - Find the best DNS servers for Iran"
         echo -e "${CYAN}3.${NC} ${ORANGE}Mirror Selector${NC} - Find the fastest apt repository mirror"
         echo -e "${CYAN}4.${NC} ${BLUE}BBR Only (Legacy)${NC} - Install only BBR congestion control"
+        echo -e "${CYAN}5.${NC} ${RED}Disk Cleanup & Log Optimization${NC} - Clean logs, cache, schedule auto cleanup"
         echo -e "${CYAN}0.${NC} ↩️ Back to Main Menu"
         echo ""
         
-        read -p "Select option [0-4]: " choice
+        read -p "Select option [0-5]: " choice
         
         case $choice in
             1) 
@@ -3447,6 +3586,7 @@ optimize_server() {
             2) install_dns_finder ;;
             3) install_mirror_selector ;;
             4) install_bbr_legacy ;;
+            5) disk_cleanup_menu ;;
             0) return ;;
             *) print_error "Invalid option"; sleep 1 ;;
         esac
